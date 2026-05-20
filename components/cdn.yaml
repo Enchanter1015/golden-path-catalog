@@ -23,7 +23,7 @@ Resources:
         Origins:
           - Id: S3Origin
             DomainName: !ImportValue
-              Fn::Sub: '${HostingStack}-WebsiteURL'
+              Fn::Sub: '${HostingStack}-WebsiteDomain'
             CustomOriginConfig:
               HTTPPort: 80
               OriginProtocolPolicy: http-only

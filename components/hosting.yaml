@@ -48,3 +48,8 @@ Outputs:
   WebsiteURL:
     Value: !GetAtt HostingBucket.WebsiteURL
     Export: { Name: !Sub '${AWS::StackName}-WebsiteURL' }
+  WebsiteDomain:
+    Value: !Select
+      - 1
+      - !Split ["//", !GetAtt HostingBucket.WebsiteURL]
+    Export: { Name: !Sub '${AWS::StackName}-WebsiteDomain' }
