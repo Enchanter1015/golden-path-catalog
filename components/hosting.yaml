@@ -12,16 +12,23 @@ Parameters:
  
 Resources:
  
-  HostingBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      WebsiteConfiguration:
-        IndexDocument: index.html
-        ErrorDocument: index.html
-      Tags:
-        - { Key: Team,        Value: !Ref Team }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: AppVersion,  Value: !Ref AppVersion }
+HostingBucket:
+  Type: AWS::S3::Bucket
+  Properties:
+    PublicAccessBlockConfiguration:
+      BlockPublicAcls: false
+      BlockPublicPolicy: false
+      IgnorePublicAcls: false
+      RestrictPublicBuckets: false
+    WebsiteConfiguration:
+      IndexDocument: index.html
+      ErrorDocument: index.html
+    Tags:
+      - { Key: Team,        Value: !Ref Team }
+      - { Key: Environment, Value: !Ref Environment }
+      - { Key: CostCentre,  Value: !Ref CostCentre }
+      - { Key: AppVersion,  Value: !Ref AppVersion }
+      - { Key: ManagedBy,   Value: CloudFormation }
  
   BucketPolicy:
     Type: AWS::S3::BucketPolicy

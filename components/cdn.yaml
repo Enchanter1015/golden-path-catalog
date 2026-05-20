@@ -9,6 +9,7 @@ Parameters:
   Environment:  { Type: String }
   ProjectName:  { Type: String }
   AppVersion:   { Type: String }
+  ManagedBy:   { Type: String, Default: "CloudFormation" }
   HostingStack: { Type: String, Description: Name of the deployed hosting stack }
  
 Resources:
