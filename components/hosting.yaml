@@ -9,6 +9,7 @@ Parameters:
   Environment: { Type: String, AllowedValues: [dev, staging, prod] }
   ProjectName: { Type: String }
   AppVersion:  { Type: String }
+  ManagedBy:   { Type: String, Default: "CloudFormation" }
  
 Resources:
  
@@ -26,9 +27,8 @@ HostingBucket:
     Tags:
       - { Key: Team,        Value: !Ref Team }
       - { Key: Environment, Value: !Ref Environment }
-      - { Key: CostCentre,  Value: !Ref CostCentre }
       - { Key: AppVersion,  Value: !Ref AppVersion }
-      - { Key: ManagedBy,   Value: CloudFormation }
+      - { Key: ManagedBy,   Value: !Ref ManagedBy }
  
   BucketPolicy:
     Type: AWS::S3::BucketPolicy
