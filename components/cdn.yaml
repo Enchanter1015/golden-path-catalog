@@ -6,7 +6,7 @@ Description: >
  
 Parameters:
   Team:         { Type: String }
-  Environment:  { Type: String }
+  Environment:  { Type: String, AllowedValues: [dev, staging, prod] }
   ProjectName:  { Type: String }
   AppVersion:   { Type: String }
   ManagedBy:   { Type: String, Default: "CloudFormation" }

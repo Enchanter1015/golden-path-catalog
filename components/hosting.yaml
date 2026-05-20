@@ -3,33 +3,33 @@ Description: >
   Golden Path Catalog v1 — S3 Static Hosting Component.
   Provisions an S3 bucket configured for static website delivery.
   Mandatory tags are enforced as required parameters.
- 
+
 Parameters:
   Team:        { Type: String }
   Environment: { Type: String, AllowedValues: [dev, staging, prod] }
   ProjectName: { Type: String }
   AppVersion:  { Type: String }
   ManagedBy:   { Type: String, Default: "CloudFormation" }
- 
+
 Resources:
- 
-HostingBucket:
-  Type: AWS::S3::Bucket
-  Properties:
-    PublicAccessBlockConfiguration:
-      BlockPublicAcls: false
-      BlockPublicPolicy: false
-      IgnorePublicAcls: false
-      RestrictPublicBuckets: false
-    WebsiteConfiguration:
-      IndexDocument: index.html
-      ErrorDocument: index.html
-    Tags:
-      - { Key: Team,        Value: !Ref Team }
-      - { Key: Environment, Value: !Ref Environment }
-      - { Key: AppVersion,  Value: !Ref AppVersion }
-      - { Key: ManagedBy,   Value: !Ref ManagedBy }
- 
+
+  HostingBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      Tags:
+        - { Key: Team,        Value: !Ref Team }
+        - { Key: Environment, Value: !Ref Environment }
+        - { Key: AppVersion,  Value: !Ref AppVersion }
+        - { Key: ManagedBy,   Value: !Ref ManagedBy }
+
   BucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -40,7 +40,7 @@ HostingBucket:
             Principal: '*'
             Action: s3:GetObject
             Resource: !Sub 'arn:aws:s3:::${HostingBucket}/*'
- 
+
 Outputs:
   BucketName:
     Value: !Ref HostingBucket
