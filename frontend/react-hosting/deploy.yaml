@@ -1,0 +1,110 @@
+name: Golden Path Deploy (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      team:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+      project:
+        required: true
+        type: string
+      catalog_ver:
+        required: true
+        type: string
+      aws_region:
+        required: false
+        type: string
+        default: us-east-1
+    secrets:
+      AWS_ACCESS_KEY_ID:
+        required: true
+      AWS_SECRET_ACCESS_KEY:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout application code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ inputs.aws_region }}
+
+      - name: Set app version from Git SHA
+        run: echo "APP_VERSION=v$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Download catalog component
+        run: |
+          mkdir -p infra
+          BASE=https://raw.githubusercontent.com/${{ github.repository_owner }}
+          BASE=$BASE/golden-path-catalog/${{ inputs.catalog_ver }}/components
+          curl -fsSL --show-error $BASE/hosting.yaml -o infra/hosting.yaml
+          echo "Catalog ${{ inputs.catalog_ver }} downloaded"
+          echo "Lines: $(wc -l < infra/hosting.yaml)"
+
+      - name: Install and build React application
+        run: |
+          npm install
+          REACT_APP_VERSION=${{ env.APP_VERSION }} \
+          REACT_APP_TEAM=${{ inputs.team }} \
+          REACT_APP_ENVIRONMENT=${{ inputs.environment }} \
+          REACT_APP_CATALOG_VER=${{ inputs.catalog_ver }} \
+          npm run build
+
+      - name: Verify build output
+        run: |
+          echo "Build files: $(find build -type f | wc -l)"
+          ls build/
+
+      - name: Deploy hosting stack
+        run: |
+          aws cloudformation deploy \
+            --template-file infra/hosting.yaml \
+            --stack-name ${{ inputs.project }}-hosting-${{ inputs.environment }}-${{ env.APP_VERSION }} \
+            --parameter-overrides \
+              Team=${{ inputs.team }} \
+              Environment=${{ inputs.environment }} \
+              ProjectName=${{ inputs.project }} \
+              AppVersion=${{ env.APP_VERSION }} \
+            --no-fail-on-empty-changeset
+
+      - name: Sync assets to S3
+        run: |
+          BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name ${{ inputs.project }}-hosting-${{ inputs.environment }}-${{ env.APP_VERSION }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`BucketName`].OutputValue' \
+            --output text)
+          echo "Syncing to: $BUCKET"
+          aws s3 sync build s3://$BUCKET --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          DIST=$(aws cloudformation describe-stacks \
+            --stack-name ${{ inputs.project }}-hosting-${{ inputs.environment }}-${{ env.APP_VERSION }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`DistributionId`].OutputValue' \
+            --output text)
+          echo "Invalidating: $DIST"
+          aws cloudfront create-invalidation \
+            --distribution-id $DIST --paths '/*'
+
+      - name: Print live URL
+        run: |
+          URL=$(aws cloudformation describe-stacks \
+            --stack-name ${{ inputs.project }}-hosting-${{ inputs.environment }}-${{ env.APP_VERSION }} \
+            --query 'Stacks[0].Outputs[?OutputKey==`DistributionURL`].OutputValue' \
+            --output text)
+          echo "========================================"
+          echo "App version:     ${{ env.APP_VERSION }}"
+          echo "Catalog version: ${{ inputs.catalog_ver }}"
+          echo "Live at:         $URL"
+          echo "========================================"
