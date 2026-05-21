@@ -43,13 +43,13 @@ jobs:
       - name: Set app version from Git SHA
         run: echo "APP_VERSION=v$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
-      - name: Download catalog component
+      - name: Download react-hosting CloudFormation template
         run: |
           mkdir -p infra
           BASE=https://raw.githubusercontent.com/${{ github.repository_owner }}
-          BASE=$BASE/golden-path-catalog/${{ inputs.catalog_ver }}/components
+          BASE=$BASE/golden-path-catalog/${{ inputs.catalog_ver }}/frontend/react-hosting
           curl -fsSL --show-error $BASE/hosting.yaml -o infra/hosting.yaml
-          echo "Catalog ${{ inputs.catalog_ver }} downloaded"
+          echo "React hosting template ${{ inputs.catalog_ver }} downloaded"
           echo "Lines: $(wc -l < infra/hosting.yaml)"
 
       - name: Install and build React application
