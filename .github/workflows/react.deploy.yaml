@@ -1,4 +1,4 @@
-name: React - Golden Path Deploy
+name: react deploy
 
 on:
   workflow_call:
@@ -16,8 +16,8 @@ on:
         required: true
         type: string
       aws_region:
-        required: false
         type: string
+        required: false
         default: us-east-1
     secrets:
       AWS_ACCESS_KEY_ID:
@@ -28,83 +28,79 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout application code
-        uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            ${{ inputs.aws_region }}
+    - name: get the code
+      uses: actions/checkout@v4
 
-      - name: Set app version from Git SHA
-        run: echo "APP_VERSION=v$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+    - name: aws login
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ inputs.aws_region }}
 
-      - name: Download react-hosting CloudFormation template
-        run: |
-          mkdir -p infra
-          BASE=https://raw.githubusercontent.com/${{ github.repository_owner }}
-          BASE=$BASE/golden-path-catalog/${{ inputs.catalog_ver }}/frontend/react-hosting
-          curl -fsSL --show-error $BASE/hosting.yaml -o infra/hosting.yaml
-          echo "React hosting template ${{ inputs.catalog_ver }} downloaded"
-          echo "Lines: $(wc -l < infra/hosting.yaml)"
+    - name: version from git
+      run: echo "APP_VERSION=v$(git rev-parse --short HEAD)" >> $GITHUB_ENV
 
-      - name: Install and build React application
-        run: |
-          npm install
-          REACT_APP_VERSION=${{ env.APP_VERSION }} \
-          REACT_APP_TEAM=${{ inputs.team }} \
-          REACT_APP_ENVIRONMENT=${{ inputs.environment }} \
-          REACT_APP_CATALOG_VER=${{ inputs.catalog_ver }} \
-          npm run build
+    - name: download template
+      run: |
+        mkdir -p infra
+        # building the url in two parts otherwise it gets too long
+        BASE=https://raw.githubusercontent.com/${{ github.repository_owner }}
+        BASE=$BASE/golden-path-catalog/${{ inputs.catalog_ver }}/frontend/react-hosting
+        curl -fsSL --show-error $BASE/hosting.yaml -o infra/hosting.yaml
+        echo "got the template, lines: $(wc -l < infra/hosting.yaml)"
 
-      - name: Verify build output
-        run: |
-          echo "Build files: $(find build -type f | wc -l)"
-          ls build/
+    - name: npm install and build
+      run: |
+        npm install
+        REACT_APP_VERSION=${{ env.APP_VERSION }} \
+        REACT_APP_TEAM=${{ inputs.team }} \
+        REACT_APP_ENVIRONMENT=${{ inputs.environment }} \
+        REACT_APP_CATALOG_VER=${{ inputs.catalog_ver }} \
+        npm run build
 
-      - name: Deploy hosting stack
-        run: |
-          aws cloudformation deploy \
-            --template-file infra/hosting.yaml \
-            --stack-name ${{ inputs.project }}-hosting-${{ inputs.environment }}-${{ env.APP_VERSION }} \
-            --parameter-overrides \
-              Team=${{ inputs.team }} \
-              Environment=${{ inputs.environment }} \
-              ProjectName=${{ inputs.project }} \
-              AppVersion=${{ env.APP_VERSION }} \
-            --no-fail-on-empty-changeset
+    - name: check build worked
+      run: |
+        ls build/
+        echo "file count: $(find build -type f | wc -l)"
 
-      - name: Sync assets to S3
-        run: |
-          BUCKET=$(aws cloudformation describe-stacks \
-            --stack-name ${{ inputs.project }}-hosting-${{ inputs.environment }}-${{ env.APP_VERSION }} \
-            --query 'Stacks[0].Outputs[?OutputKey==`BucketName`].OutputValue' \
-            --output text)
-          echo "Syncing to: $BUCKET"
-          aws s3 sync build s3://$BUCKET --delete
+    - name: cloudformation deploy
+      run: |
+        aws cloudformation deploy \
+          --template-file infra/hosting.yaml \
+          --stack-name ${{ inputs.project }}-hosting-${{ inputs.environment }}-${{ env.APP_VERSION }} \
+          --parameter-overrides \
+            Team=${{ inputs.team }} \
+            Environment=${{ inputs.environment }} \
+            ProjectName=${{ inputs.project }} \
+            AppVersion=${{ env.APP_VERSION }} \
+          --no-fail-on-empty-changeset
 
-      - name: Invalidate CloudFront cache
-        run: |
-          DIST=$(aws cloudformation describe-stacks \
-            --stack-name ${{ inputs.project }}-hosting-${{ inputs.environment }}-${{ env.APP_VERSION }} \
-            --query 'Stacks[0].Outputs[?OutputKey==`DistributionId`].OutputValue' \
-            --output text)
-          echo "Invalidating: $DIST"
-          aws cloudfront create-invalidation \
-            --distribution-id $DIST --paths '/*'
+    - name: push files to s3
+      run: |
+        # have to get bucket name from the stack output first
+        BUCKET=$(aws cloudformation describe-stacks \
+          --stack-name ${{ inputs.project }}-hosting-${{ inputs.environment }}-${{ env.APP_VERSION }} \
+          --query 'Stacks[0].Outputs[?OutputKey==`BucketName`].OutputValue' \
+          --output text)
+        aws s3 sync build s3://$BUCKET --delete
+        echo "done, bucket was: $BUCKET"
 
-      - name: Print live URL
-        run: |
-          URL=$(aws cloudformation describe-stacks \
-            --stack-name ${{ inputs.project }}-hosting-${{ inputs.environment }}-${{ env.APP_VERSION }} \
-            --query 'Stacks[0].Outputs[?OutputKey==`DistributionURL`].OutputValue' \
-            --output text)
-          echo "========================================"
-          echo "App version:     ${{ env.APP_VERSION }}"
-          echo "Catalog version: ${{ inputs.catalog_ver }}"
-          echo "Live at:         $URL"
-          echo "========================================"
+    - name: invalidate cf cache
+      run: |
+        DIST=$(aws cloudformation describe-stacks \
+          --stack-name ${{ inputs.project }}-hosting-${{ inputs.environment }}-${{ env.APP_VERSION }} \
+          --query 'Stacks[0].Outputs[?OutputKey==`DistributionId`].OutputValue' \
+          --output text)
+        aws cloudfront create-invalidation --distribution-id $DIST --paths '/*'
+        echo "cache cleared for $DIST"
+
+    - name: get the url
+      run: |
+        URL=$(aws cloudformation describe-stacks \
+          --stack-name ${{ inputs.project }}-hosting-${{ inputs.environment }}-${{ env.APP_VERSION }} \
+          --query 'Stacks[0].Outputs[?OutputKey==`DistributionURL`].OutputValue' \
+          --output text)
+        echo "deployed ${{ env.APP_VERSION }} to $URL"

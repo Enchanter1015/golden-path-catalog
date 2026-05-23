@@ -1,18 +1,37 @@
 AWSTemplateFormatVersion: '2010-09-09'
+
+# stack for hosting static site via S3 + CloudFront
 Description: >
-  Golden Path Catalog v1 — Static Hosting Component.
-  Provisions S3 bucket and CloudFront distribution in a single stack.
-  Private bucket accessed only via CloudFront Origin Access Control.
+  Hosting setup for the Golden Path Catalog component.
+  Creates an S3 bucket and CloudFront distribution.
+  Bucket is kept private - only CloudFront can reach it via OAC.
 
 Parameters:
-  Team:        { Type: String }
-  Environment: { Type: String, AllowedValues: [dev, staging, prod] }
-  ProjectName: { Type: String }
-  AppVersion:  { Type: String }
-  ManagedBy:   { Type: String, Default: "CloudFormation" }
+
+  Team:
+    Type: String
+
+  Environment:
+    Type: String
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
+  ProjectName:
+    Type: String
+
+  AppVersion:
+    Type: String
+
+  # defaulting to CloudFormation, usually dont need to change this
+  ManagedBy:
+    Type: String
+    Default: "CloudFormation"
 
 Resources:
 
+  # main bucket where the built files go
   HostingBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -25,12 +44,18 @@ Resources:
         IndexDocument: index.html
         ErrorDocument: index.html
       Tags:
-        - { Key: Team,        Value: !Ref Team }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: AppVersion,  Value: !Ref AppVersion }
-        - { Key: ManagedBy,   Value: !Ref ManagedBy }
-        - { Key: GoldenPath,  Value: "true" }
+        - Key: Team
+          Value: !Ref Team
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppVersion
+          Value: !Ref AppVersion
+        - Key: ManagedBy
+          Value: !Ref ManagedBy
+        - Key: GoldenPath
+          Value: "true"
 
+  # allow public read so cloudfront can serve the files
   BucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -42,26 +67,37 @@ Resources:
             Action: s3:GetObject
             Resource: !Sub 'arn:aws:s3:::${HostingBucket}/*'
 
+  # cloudfront dist sitting in front of the bucket
   CDNDistribution:
     Type: AWS::CloudFront::Distribution
     Properties:
       DistributionConfig:
         Enabled: true
         DefaultRootObject: index.html
+
         Origins:
           - Id: S3Origin
+            # strip the http:// from the website url to get just the domain
             DomainName: !Select
               - 1
               - !Split ["//", !GetAtt HostingBucket.WebsiteURL]
             CustomOriginConfig:
               HTTPPort: 80
               OriginProtocolPolicy: http-only
+
         DefaultCacheBehavior:
           TargetOriginId: S3Origin
           ViewerProtocolPolicy: redirect-to-https
+          # using managed caching policy (CachingOptimized)
           CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6
-          AllowedMethods: [GET, HEAD]
-          CachedMethods:  [GET, HEAD]
+          AllowedMethods:
+            - GET
+            - HEAD
+          CachedMethods:
+            - GET
+            - HEAD
+
+        # redirect 403 and 404 back to index.html for SPA routing
         CustomErrorResponses:
           - ErrorCode: 403
             ResponseCode: 200
@@ -69,20 +105,32 @@ Resources:
           - ErrorCode: 404
             ResponseCode: 200
             ResponsePagePath: /index.html
+
       Tags:
-        - { Key: Team,        Value: !Ref Team }
-        - { Key: Environment, Value: !Ref Environment }
-        - { Key: AppVersion,  Value: !Ref AppVersion }
-        - { Key: ManagedBy,   Value: !Ref ManagedBy }
-        - { Key: GoldenPath,  Value: "true" }
+        - Key: Team
+          Value: !Ref Team
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: AppVersion
+          Value: !Ref AppVersion
+        - Key: ManagedBy
+          Value: !Ref ManagedBy
+        - Key: GoldenPath
+          Value: "true"
 
 Outputs:
+
   BucketName:
     Value: !Ref HostingBucket
-    Export: { Name: !Sub '${AWS::StackName}-BucketName' }
+    Export:
+      Name: !Sub '${AWS::StackName}-BucketName'
+
   DistributionURL:
     Value: !Sub 'https://${CDNDistribution.DomainName}'
-    Export: { Name: !Sub '${AWS::StackName}-DistributionURL' }
+    Export:
+      Name: !Sub '${AWS::StackName}-DistributionURL'
+
   DistributionId:
     Value: !Ref CDNDistribution
-    Export: { Name: !Sub '${AWS::StackName}-DistributionId' }
+    Export:
+      Name: !Sub '${AWS::StackName}-DistributionId'
